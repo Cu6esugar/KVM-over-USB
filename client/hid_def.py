@@ -2,6 +2,7 @@
 #
 from serial import Serial
 from serial import SerialException
+from serial.tools import list_ports
 from ch9329 import keyboard
 from ch9329 import mouse
 from ch9329.config import get_product
@@ -11,7 +12,7 @@ from PySide6.QtWidgets import *
 import os
 import sys
 import yaml  # type: ignore
-import time 
+import time
 import random
 
 product_id = 0x2107 #换了硬件，dummy
@@ -42,6 +43,25 @@ def set_screen_size(screen_size):
     global SCREEN_SIZE
     SCREEN_SIZE = screen_size
 
+def scan_com_ports():
+    """扫描所有 COM 口, 返回 (端口列表, CH340端口或None)。
+    列表元素为 device 名如 'COM10'; CH340(沁恒 VID 0x1A86) 排最前。"""
+    ch340 = None
+    items = []
+    for p in list_ports.comports():
+        if p.vid == 0x1A86:  # wch CH340/CH341
+            if ch340 is None:
+                ch340 = p.device
+            items.insert(0, p.device)
+        else:
+            items.append(p.device)
+    items.sort(key=lambda d: (not d.upper().startswith("COM"), d))
+    # 保证 CH340 在首位
+    if ch340 is not None:
+        items.remove(ch340)
+        items.insert(0, ch340)
+    return items, ch340
+
 def read_config_hid():
     default_config_hid="""COM_port: COM8
 Screen size X: 1920
@@ -63,10 +83,23 @@ Screen size Y: 1080
 hid_setting_cfg = read_config_hid()
 set_com_port(hid_setting_cfg[0])
 set_screen_size(hid_setting_cfg[1:3])
+# 扫描 COM 口: 配置里的口打不开时自动回退到 CH340 (启动时默认选中)
+COM_PORT_LIST, COM_PORT_CH340 = scan_com_ports()
 try:
     K_M = Serial(COM_PORT, 9600, timeout=0.05)
-except SerialException:
-    print (COM_PORT,' is not in use, please edit the config_hid.yaml file')
+except (SerialException, TypeError):
+    if COM_PORT_CH340 is not None and COM_PORT_CH340 != COM_PORT:
+        # 配置的口失效, 自动改用 CH340
+        print(COM_PORT, "is not available, fallback to CH340:", COM_PORT_CH340)
+        set_com_port(COM_PORT_CH340)
+        COM_PORT = COM_PORT_CH340
+    try:
+        K_M = Serial(COM_PORT, 9600, timeout=0.05)
+    except SerialException:
+        print(COM_PORT, " is not in use, please edit the config_hid.yaml file")
+        COM_PORT = COM_PORT + " fail"
+except Exception:
+    print(COM_PORT, " is not in use, please edit the config_hid.yaml file")
     COM_PORT = COM_PORT + " fail"
 
 # 初始化HID设备设置
@@ -96,7 +129,10 @@ def init_usb(vendor_id, usage_page):
     return 0
 
 def check_connection() -> bool:
-    reset_k_m()
+    # 注意: 不能用 GET_INFO 探测 -- 键盘状态帧的 ACK(0x82)会积压在 RX 缓冲,
+    # 与探测应答(0x81)交错导致误判断连, 键盘会被静默禁用。
+    # 保持原版语义: 始终报告在线, 断连由写失败暴露。
+    # 同时不再像旧版那样每秒盲发键盘/鼠标释放帧(会打断长按)。
     return True
 
 # 读写HID设备
@@ -142,63 +178,39 @@ def hid_report(buffer=[], r_mode=False, report=0):
 
 def hid_report_key(buffer_key):
     if buffer_key[1]== 1:
-        if buffer_key[3]==0:
-            hid_report_key_presskey(buffer_key)
-        else:
-            function_keys=[]
-            if (buffer_key[3] & 1) or (buffer_key[3] & 16):
-                function_keys.append('ctrl')  
-            if (buffer_key[3] & 2) or (buffer_key[3] & 32):
-                function_keys.append('shift')  
-            if (buffer_key[3] & 4) or (buffer_key[3] & 64):
-                function_keys.append('alt')  
-            if (buffer_key[3] & 8) or (buffer_key[3] & 128):
-                function_keys.append('lwin')  
-            hid_report_key_presskey(buffer_key,function_keys)
-            function_keys=[]
+        # 状态透传: buffer[2]=修饰键位图(HID标准位序), buffer[4:10]=最多6个HID键码。
+        # 与真实键盘语义一致: 按住即状态保持(目标机OS自己处理长按重复),
+        # 快速打字重叠按键也不会重复触发字符。
+        keyboard.send_hid_state(K_M, buffer_key[2], buffer_key[4:10])
         if len (buffer_key) > 10:
-            if buffer_key[9]==43:        
-               keyboard.press_and_release(K_M, 'tab')             
+            if buffer_key[9]==43:
+               keyboard.press_and_release(K_M, 'tab')
             if buffer_key[10]==70:
-                keyboard.press_and_release(K_M, 'printscreen')   
+               keyboard.press_and_release(K_M, 'printscreen')
     else:
         print("line 165, buffer_key error:", buffer_key)
     return 0
 
-def hid_report_key_presskey(buffer_key,function_keys=[]):
-#    for i in range(5,6):       # 避免按键连击的问题，尝试关闭for循环，没用。
-    for i in range(5, min(10,len(buffer_key))): 
-        if buffer_key[i] == 0:
-            break
-        else:
-            keyname=KEYBOARD_CH9329CODE2KEY.get(str(buffer_key[i])) # 根据hid找keyname
-            keyboard.press_and_release(K_M, keyname, function_keys)
-    return 0
-
 def hid_report_mouse(buffer_mouse):
+    # 旋转后布局: [3]=按键位图(1左2右4中), [4:8]=坐标, [8]=滚轮
     if buffer_mouse[1] == 2:
-        if buffer_mouse[3]== 0:
-            hid_report_mouse_move_to(buffer_mouse)
-        elif ((buffer_mouse[4] == 0) & (buffer_mouse[5] == 0) & (buffer_mouse[6] == 0) & (buffer_mouse[7] == 0)):
-            hid_report_mouse_click(buffer_mouse)
+        if ((buffer_mouse[4] == 0) & (buffer_mouse[5] == 0) & (buffer_mouse[6] == 0) & (buffer_mouse[7] == 0)):
+            if buffer_mouse[3] != 0:
+                hid_report_mouse_click(buffer_mouse)
+            # 坐标全零且无按键: 忽略空帧
         else:
-            hid_report_mouse_keyDown(buffer_mouse)
+            # 移动/拖动: 按键位图与坐标同帧透传(状态语义)
             hid_report_mouse_move_to(buffer_mouse)
-            hid_report_mouse_keyUp(buffer_mouse)
-            pass
         if buffer_mouse[8]!=0:
             hid_report_mouse_wheel(buffer_mouse[8])
 
     elif buffer_mouse[1] == 7:
-        if buffer_mouse[3]== 0:
-            hid_report_mouse_move_rel(buffer_mouse)
-        elif ((buffer_mouse[4] == 0) & (buffer_mouse[5] == 0) & (buffer_mouse[6] == 0) & (buffer_mouse[7] == 0)):
-            hid_report_mouse_click(buffer_mouse)
+        # 相对模式: [4]=dx [5]=dy (mouse_report_timeout 发完即清零)
+        if ((buffer_mouse[4] == 0) & (buffer_mouse[5] == 0)):
+            if buffer_mouse[3] != 0:
+                hid_report_mouse_click(buffer_mouse)
         else:
-            hid_report_mouse_keyDown(buffer_mouse)
             hid_report_mouse_move_rel(buffer_mouse)
-            hid_report_mouse_keyUp(buffer_mouse)
-            pass
         if buffer_mouse[6]!=0:
             hid_report_mouse_wheel(buffer_mouse[6])
     else:
@@ -210,20 +222,24 @@ def hid_report_mouse_move_to(buffer_mouse):
     xx= int(x / 0x7FFF * SCREEN_SIZE[0])
     y= ((buffer_mouse[7] & 0xFF) << 8 ) + buffer_mouse[6]
     yy= int(y / 0x7FFF * SCREEN_SIZE[1])
-    mouse.move(K_M,xx,yy,False,SCREEN_SIZE[0],SCREEN_SIZE[1])
+    # 状态帧: 按键位图在 buffer[3](旋转后), 1左2右4中, 与坐标同帧发送支持拖动
+    mouse.send_absolute_state(K_M,xx,yy,buffer_mouse[3],SCREEN_SIZE[0],SCREEN_SIZE[1])
     print ("line 214, mouse move to",xx,yy)
     return 0
 
 def hid_report_mouse_click(buffer_mouse):
+    # 原地点击: 按下->停留->释放 (保持原有人性化延迟)
     if buffer_mouse[3]== 1:
-        mouse.click(K_M,'left')
+        mouse.press(K_M,'left')
     elif buffer_mouse[3]== 2:
-        mouse.click(K_M,'right')
+        mouse.press(K_M,'right')
     elif buffer_mouse[3]== 4:
-        mouse.click(K_M,'middle')
+        mouse.press(K_M,'middle')
     else:
-        print ("line 225, hid_report_mouse_click, mouse XButton? ",buffer_mouse)        
+        print ("line 225, hid_report_mouse_click, mouse XButton? ",buffer_mouse)
         return 0
+    time.sleep(random.uniform(0.1, 0.3))
+    mouse.release(K_M)
     return 0
 
 def hid_report_mouse_keyDown(buffer_mouse):
@@ -251,7 +267,8 @@ def hid_report_mouse_move_rel(buffer_mouse_rel):
     y_hid = buffer_mouse_rel[5]
     x_hid -= 0xFF if x_hid > 127 else 0
     y_hid -= 0xFF if y_hid > 127 else 0
-    mouse.move(K_M,x_hid*3,y_hid*3,True,SCREEN_SIZE[0],SCREEN_SIZE[1])
+    # 状态帧: 相对移动同样携带按键位图(buffer[3] 旋转后), 支持按住拖动
+    mouse.send_relative_state(K_M,x_hid*3,y_hid*3,buffer_mouse_rel[3])
     print ("line 255, mouse move rel",x_hid,y_hid)
     return 0
 
@@ -298,8 +315,19 @@ class HID_Setting_Dialog(QDialog):
         label0=QLabel ()
         layout.addRow(label0)
         label1 = QLabel('HID COM 端口： ')
-        self.le1 = QLineEdit(COM_PORT)
-        layout.addRow(label1,self.le1)
+        # 下拉选择: 扫描所有 COM 口, CH340 排最前并默认选中
+        self.cb1 = QComboBox()
+        ports, ch340 = scan_com_ports()
+        if not ports:
+            ports = [COM_PORT.split()[0] if COM_PORT else ""]
+        self.cb1.addItems(ports)
+        current = COM_PORT.split()[0]  # 去掉可能带的 " fail" 后缀
+        if current in ports:
+            self.cb1.setCurrentText(current)
+        # CH340 优先(已是列表首位); 当前口无效时落到 CH340
+        elif ch340:
+            self.cb1.setCurrentText(ch340)
+        layout.addRow(label1,self.cb1)
         label2 = QLabel('服务器（被控端）屏幕分辨率 宽度: ')
         self.le2 = QLineEdit(str(SCREEN_SIZE[0]))
         layout.addRow(label2,self.le2)
@@ -311,24 +339,24 @@ class HID_Setting_Dialog(QDialog):
         QBbox= QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         button_ok_cancel=QDialogButtonBox(QBbox)
         layout.addRow(button_ok_cancel)
-        self.setting_text=[self.le1.text(),self.le2.text(),self.le3.text()]
+        self.setting_text=[self.cb1.currentText(),self.le2.text(),self.le3.text()]
         button_ok_cancel.accepted.connect(self.save_hid_setting)
-        button_ok_cancel.rejected.connect(self.reject) 
+        button_ok_cancel.rejected.connect(self.reject)
         self.setLayout(layout)
         self.setWindowTitle('HID setting')
         return 0
 
     def save_hid_setting(self):
-        input_com_port=self.le1.text()
+        input_com_port=self.cb1.currentText().strip()
         input_screen_x=self.le2.text()
         input_screen_y=self.le3.text()
-        if (input_com_port[0:3]=="COM") & (input_com_port[3].isdigit()):
-            input_com_port=input_com_port[0:4]
+        # 校验 COM 口名: COM + 数字 (不再截断, 支持 COM10+)
+        if (input_com_port[0:3].upper()=="COM") and (input_com_port[3:].isdigit()) and (len(input_com_port)>3):
             if COM_PORT!=input_com_port:
                 set_com_port(input_com_port)
                 msgBox = QMessageBox()
                 msgBox.setText("修改COM口,请关闭(或强制关闭)程序后 重新运行程序")
-                msgBox.exec() 
+                msgBox.exec()
         else:
             msgBox = QMessageBox()
             msgBox.setText("COM口 格式是 大写COM和数字,例如:COM5")

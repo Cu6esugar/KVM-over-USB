@@ -786,13 +786,13 @@ del</source>
     </message>
     <message>
         <location filename="ui/main.ui" line="838"/>
-        <source>Author: @ElluIFX</source>
-        <translation>作者：@ElluIFX</translation>
+        <source>Author: @Cubesu9ar</source>
+        <translation>作者：@Cubesu9ar</translation>
     </message>
     <message>
         <location filename="ui/main.ui" line="843"/>
         <source>Raw author: @Jackadminx</source>
-        <translation>原项目作者：@Jackadminx</translation>
+        <translation>原项目作者：@ElluIFX @Jackadminx</translation>
     </message>
     <message>
         <location filename="ui/main.ui" line="851"/>

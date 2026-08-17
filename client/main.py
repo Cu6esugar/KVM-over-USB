@@ -415,6 +415,22 @@ class MyMainWindow(QMainWindow, main_ui.Ui_MainWindow):
         self.statusbar_btn3.setPixmap(load_pixmap("capslock"))
         self.statusbar_btn4.setPixmap(load_pixmap("numkey"))
         self.statusbar_btn5.setPixmap(load_pixmap("hook-off"))
+        # 状态栏按钮提示
+        self.statusbar_btn1.setToolTip(
+            self.tr("Custom shortcut keys: send a key combination to the target PC")
+        )
+        self.statusbar_btn2.setToolTip(
+            self.tr("Paste board: type text/clipboard/file to the target PC")
+        )
+        self.statusbar_btn3.setToolTip(
+            self.tr("Keyboard indicator: CapsLock / NumLock / ScrollLock status")
+        )
+        self.statusbar_btn4.setToolTip(
+            self.tr("Numeric keypad: on-screen numpad keys")
+        )
+        self.statusbar_btn5.setToolTip(
+            self.tr("System hook: block local keyboard from reacting while sending keys")
+        )
 
         self.statusbar_icon1 = MyPushButton()
         self.statusbar_icon2 = MyPushButton()
@@ -422,6 +438,10 @@ class MyMainWindow(QMainWindow, main_ui.Ui_MainWindow):
         self.statusbar_icon1.setPixmap(load_pixmap("video-off"))
         self.statusbar_icon2.setPixmap(load_pixmap("keyboard-off"))
         self.statusbar_icon3.setPixmap(load_pixmap("mouse-off"))
+        # 状态图标提示
+        self.statusbar_icon1.setToolTip(self.tr("Video device status (click: device setup)"))
+        self.statusbar_icon2.setToolTip(self.tr("Keyboard device status (click: reload HID)"))
+        self.statusbar_icon3.setToolTip(self.tr("Mouse capture status (click: capture/release)"))
 
         self.statusBar().setStyleSheet("padding: 0px;")
         self.statusBar().addPermanentWidget(self.statusbar_lable1)
@@ -585,10 +605,13 @@ class MyMainWindow(QMainWindow, main_ui.Ui_MainWindow):
         )
 
         self.actionAuthor.triggered.connect(
-            lambda: QDesktopServices.openUrl(QUrl("https://github.com/ElluIFX"))
+            lambda: QDesktopServices.openUrl(QUrl("https://github.com/Cu6esugar"))
         )
         self.actionRaw_author.triggered.connect(
-            lambda: QDesktopServices.openUrl(QUrl("https://github.com/Jackadminx"))
+            lambda: (
+                QDesktopServices.openUrl(QUrl("https://github.com/ElluIFX")),
+                QDesktopServices.openUrl(QUrl("https://github.com/Jackadminx")),
+            )
         )
 
         self.device_setup_dialog.checkBoxAudio.setChecked(

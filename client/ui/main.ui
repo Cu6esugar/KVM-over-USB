@@ -835,12 +835,12 @@
   </action>
   <action name="actionAuthor">
    <property name="text">
-    <string>Author: @ElluIFX</string>
+    <string>Author: @Cu6esugar</string>
    </property>
   </action>
   <action name="actionRaw_author">
    <property name="text">
-    <string>Raw author: @Jackadminx</string>
+    <string>Raw authors: @ElluIFX @Jackadminx</string>
    </property>
   </action>
   <action name="actionRelative_mouse">

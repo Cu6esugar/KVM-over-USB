@@ -1,0 +1,11 @@
+# runtime artifacts
+__pycache__/
+*.pyc
+venv/
+error.log
+config.yaml
+config_hid.yaml
+
+# build output
+build_console/
+Mini-KVM-Client/
