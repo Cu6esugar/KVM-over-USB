@@ -178,10 +178,10 @@ def hid_report(buffer=[], r_mode=False, report=0):
 
 def hid_report_key(buffer_key):
     if buffer_key[1]== 1:
-        # 状态透传: buffer[2]=修饰键位图(HID标准位序), buffer[4:10]=最多6个HID键码。
-        # 与真实键盘语义一致: 按住即状态保持(目标机OS自己处理长按重复),
-        # 快速打字重叠按键也不会重复触发字符。
-        keyboard.send_hid_state(K_M, buffer_key[2], buffer_key[4:10])
+        # 状态透传(旋转后布局): [2]=report(恒0), [3]=修饰键位图(HID位序), [4:10]=键码
+        # 注意首键码位[4]恒为0(main.py把键码放在原始buffer[4:10]), 实际键码在[5:10],
+        # 与修饰键同帧发送。与真实键盘语义一致: 按住=状态保持, 松开=移除。
+        keyboard.send_hid_state(K_M, buffer_key[3], buffer_key[4:10])
         if len (buffer_key) > 10:
             if buffer_key[9]==43:
                keyboard.press_and_release(K_M, 'tab')
