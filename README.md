@@ -1,17 +1,19 @@
-# KVM over USB (改)
-一个简单的KVM over USB方案
+# KVM over USB 现场支持方案
+基于市售容易获得的HDMI采集卡和HID模拟芯片，搭建出的KVM over USB方案，方便现场支持搭建和试用
 
 ## 简介
-这个项目是沿着这两位老哥走的路，整合出了一个 【便宜】+【又不是不能用】的 **KVM over USB (改)**  方案。
+这个项目是沿着这三位老哥走的路，整合出了一个 【方便】+【满足基本需求】的 **KVM over USB**  方案。
+
+[binne](https://github.com/binnehot)/[KVM-over-USB](https://github.com/binnehot/KVM-over-USB)
 
 [Jackadminx](https://github.com/Jackadminx)/[KVM-Card-Mini](https://github.com/Jackadminx/KVM-Card-Mini)
 
 [ElluIFX](https://github.com/ElluIFX)/[KVM-Card-Mini-PySide6](https://github.com/ElluIFX/KVM-Card-Mini-PySide6)
 
 ## 硬件
-三/四个常规小配件，不用做PCB板，花70多块钱就能搭出这个KVM over USB的方案。
+三/四个常规小配件，不用做PCB板，淘宝/深圳随时可采购，花费100元左右就能搭出这个KVM over USB的方案。
 
-1. 视频采集卡：理论上所有MS2130采集卡都可以  (40-90+元）
+1. 视频采集卡：理论上所USB视频采集卡采集卡都可以  (40-90+元）
 2. CH9329虚拟键盘鼠标usb线：这是采用CH340+CH9329方案的usb转COM，再转USB模拟HID的线  (20元+）
 3. HDMI线：1080P分辨率，没有特别要求  (10元+）
 4. （usb3.0集线器）：如果电脑有两个usb口，可以省略。如果用usb2.0的集线器，也行。
