@@ -80,7 +80,8 @@ def send_absolute_state(
         + y_cur.to_bytes(2, "little")
         + int(wheel).to_bytes(1, "big", signed=True)
     )
-    ser.write(get_packet(HEAD, ADDR, CMD_ABS, LEN_ABS, data))
+    packet = get_packet(HEAD, ADDR, CMD_ABS, LEN_ABS, data)
+    ser.write(packet)
 
 
 def send_relative_state(
