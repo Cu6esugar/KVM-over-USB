@@ -268,8 +268,16 @@ def hid_report_mouse_move_rel(buffer_mouse_rel):
     x_hid -= 0xFF if x_hid > 127 else 0
     y_hid -= 0xFF if y_hid > 127 else 0
     # 状态帧: 相对移动同样携带按键位图(buffer[3] 旋转后), 支持按住拖动
-    mouse.send_relative_state(K_M,x_hid*3,y_hid*3,buffer_mouse_rel[3])
-    print ("line 255, mouse move rel",x_hid,y_hid)
+    # 单帧位移上限 ±127, 乘 3 加速后可能溢出, 拆成多帧发送
+    remaining_x = x_hid * 3
+    remaining_y = y_hid * 3
+    buttons = buffer_mouse_rel[3]
+    while remaining_x or remaining_y:
+        dx = max(-127, min(127, remaining_x))
+        dy = max(-127, min(127, remaining_y))
+        mouse.send_relative_state(K_M, dx, dy, buttons)
+        remaining_x -= dx
+        remaining_y -= dy
     return 0
 
 def hid_report_mouse_wheel(buffer_wheel):

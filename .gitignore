@@ -9,3 +9,6 @@ config_hid.yaml
 # build output
 build_console/
 Mini-KVM-Client/
+
+# nuitka crash report (regenerated on next compile failure)
+nuitka-crash-report.xml

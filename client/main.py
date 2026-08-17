@@ -1,3 +1,4 @@
+import datetime
 import os
 import random
 import re
@@ -249,6 +250,8 @@ class MyMainWindow(QMainWindow, main_ui.Ui_MainWindow):
 
         self.camera = None
         self.camera_opened = False
+        self.video_recording = False
+        self._pending_move = None
         self.camera_info = None
         self.audio_opened = False
         self.device_connected = False
@@ -1078,6 +1081,7 @@ class MyMainWindow(QMainWindow, main_ui.Ui_MainWindow):
 
         self.video_record = QMediaRecorder(self.camera)
         self.capture_session.setRecorder(self.video_record)
+        self.video_record.recorderStateChanged.connect(self.recorder_state_changed)
         self.video_record.setQuality(
             getattr(QMediaRecorder.Quality, self.video_record_config["quality"])
         )
@@ -1087,8 +1091,19 @@ class MyMainWindow(QMainWindow, main_ui.Ui_MainWindow):
                 QMediaRecorder.EncodingMode, self.video_record_config["encoding_mode"]
             )
         )
-        self.video_record.setVideoBitRate(self.video_record_config["encoding_bitrate"])
-        self.video_record.setVideoFrameRate(self.video_record_config["framerate"])
+        if (
+            getattr(
+                QMediaRecorder.EncodingMode, self.video_record_config["encoding_mode"]
+            )
+            != QMediaRecorder.EncodingMode.ConstantQualityEncoding
+        ):
+            self.video_record.setVideoBitRate(
+                self.video_record_config["encoding_bitrate"]
+            )
+        if self.video_record_config["framerate"] > 0:
+            self.video_record.setVideoFrameRate(
+                self.video_record_config["framerate"]
+            )
         self.video_record.setVideoResolution(QSize())
         self.video_recording = False
 
@@ -1115,6 +1130,38 @@ class MyMainWindow(QMainWindow, main_ui.Ui_MainWindow):
         self.image_capture.capture()
         logger.debug("capture_to_file ok")
 
+    # Windows Media Foundation 的 mp4 录制后端对非 ASCII 输出路径会崩溃,
+    # 先录到纯 ASCII 的临时路径, 录制结束后再移动到用户选择的位置
+    @staticmethod
+    def ascii_tmp_dir():
+        for d in (tempfile.gettempdir(), r"C:\Windows\Temp", "C:\\"):
+            try:
+                if d and d.isascii() and os.path.isdir(d) and os.access(d, os.W_OK):
+                    return d
+            except Exception:
+                continue
+        return None
+
+    def recorder_state_changed(self, state):
+        if state == QMediaRecorder.RecorderState.StoppedState and self._pending_move:
+            src, dst = self._pending_move
+            self._pending_move = None
+            try:
+                if os.path.exists(src):
+                    if os.path.exists(dst):
+                        os.remove(dst)
+                    os.replace(src, dst)
+                    self.statusBar().showMessage(
+                        self.tr("Video saved to") + f" {dst}"
+                    )
+            except Exception as e:
+                logger.error(f"move recording failed: {e}")
+                QMessageBox.warning(
+                    self,
+                    self.tr("Error"),
+                    self.tr("Failed to move recording file") + f": {e}",
+                )
+
     def record_video(self):
         if not self.camera_opened:
             return
@@ -1123,25 +1170,45 @@ class MyMainWindow(QMainWindow, main_ui.Ui_MainWindow):
             == QMediaRecorder.RecorderState.RecordingState
         ):
             self.video_record.stop()
-        if not self.video_recording:
-            file_name = QFileDialog.getSaveFileName(
-                self,
-                self.tr("Video save location"),
-                "output.mp4",
-                "Video (*.mp4)",
-            )[0]
-            if file_name == "":
-                return
-            self.video_record.setOutputLocation(QUrl.fromLocalFile(file_name))
-            self.video_record.record()
-            self.video_recording = True
-            self.actionRecord_video.setText(self.tr("Stop recording"))
-            self.statusBar().showMessage(self.tr("Video recording started"))
-        else:
-            self.video_record.stop()
             self.video_recording = False
             self.actionRecord_video.setText(self.tr("Record video"))
             self.statusBar().showMessage(self.tr("Video recording stopped"))
+            return
+        if self.video_recording:
+            return
+        file_name = QFileDialog.getSaveFileName(
+            self,
+            self.tr("Video save location"),
+            "output.mp4",
+            "Video (*.mp4)",
+        )[0]
+        if file_name == "":
+            return
+        record_path = file_name
+        self._pending_move = None
+        if not file_name.isascii():
+            tmp_dir = self.ascii_tmp_dir()
+            if tmp_dir is None:
+                QMessageBox.warning(
+                    self,
+                    self.tr("Error"),
+                    self.tr(
+                        "Recording to a path containing non-ASCII characters is not supported on this system"
+                    ),
+                )
+                return
+            record_path = os.path.join(
+                tmp_dir,
+                "kvm_rec_"
+                + datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                + ".mp4",
+            )
+            self._pending_move = (record_path, file_name)
+        self.video_record.setOutputLocation(QUrl.fromLocalFile(record_path))
+        self.video_recording = True
+        self.video_record.record()
+        self.actionRecord_video.setText(self.tr("Stop recording"))
+        self.statusBar().showMessage(self.tr("Video recording started"))
 
     def image_captured(self, id, preview):
         logger.debug("image_captured", id)
@@ -1793,6 +1860,7 @@ class MyMainWindow(QMainWindow, main_ui.Ui_MainWindow):
     def send_char(self, c):
         char_buffer = [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
         shift = False
+        cq = strB2Q(c)
         if c == "\n":
             mapcode = self.keyboard_code["ENTER"]
         elif c == "\t":
@@ -1801,7 +1869,6 @@ class MyMainWindow(QMainWindow, main_ui.Ui_MainWindow):
             mapcode = self.keyboard_code["SPACE"]
         else:
             try:
-                cq = strB2Q(c)
                 mapcode = self.keyboard_code[cq.upper()]
                 if cq.isupper():
                     shift = True
@@ -1814,12 +1881,25 @@ class MyMainWindow(QMainWindow, main_ui.Ui_MainWindow):
             self.char_idx = 0
         self.last_char = c
         char_buffer[self.char_idx + 4] = mapcode
-        if c in shift_symbol or shift:
+        if cq in shift_symbol or shift:
             char_buffer[2] |= 2
+        baud = getattr(getattr(hid_def, "K_M", None), "baudrate", 9600)
+        frame_ms = (140000 + baud - 1) // baud + 1
+        hold = max(int(self.paste_board_dialog.spinBox_ci.value()), frame_ms)
         self._hid_signal.emit(char_buffer)
-        self.qt_sleep(self.paste_board_dialog.spinBox_ci.value())
+        self._flush_tx()
+        self.qt_sleep(hold)
         self._hid_signal.emit([1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
-        self.qt_sleep(self.paste_board_dialog.spinBox_ci.value())
+        self.qt_sleep(2)
+
+    def _flush_tx(self):
+        ser = getattr(hid_def, "K_M", None)
+        if ser is None:
+            return
+        try:
+            ser.flush()
+        except Exception:
+            pass
 
     def paste_board_stop(self):
         self.paste_board_stop_flag = True
@@ -2415,8 +2495,15 @@ class MyMainWindow(QMainWindow, main_ui.Ui_MainWindow):
         self.shortcut_status(kb_buffer)
 
     def closeEvent(self, event):
-        # os._exit(0)
-        pass
+        try:
+            self._hid_thread.requestInterruption()
+            self._hid_thread.quit()
+            if not self._hid_thread.wait(2000):
+                self._hid_thread.terminate()
+                self._hid_thread.wait(2000)
+        except Exception:
+            pass
+        event.accept()
 
     @Slot()
     def on_btnServerSwitch_clicked(self):
@@ -2745,6 +2832,20 @@ def main():
             "Windows",
         ]  # or "Fusion" ?
     app = QApplication(argv)
+
+    def _excepthook(tp, val, tb):
+        import traceback as _tb
+
+        try:
+            with open(
+                os.path.join(ARGV_PATH, "error.log"), "w", encoding="utf-8"
+            ) as f:
+                f.write(f"Error Occurred at {datetime.datetime.now()}:\n")
+                f.write("".join(_tb.format_exception(tp, val, tb)))
+        except Exception:
+            pass
+
+    sys.excepthook = _excepthook
     translator = QTranslator(app)
     if translation:
         if translator.load(os.path.join(PATH, "trans_cn.qm")):
