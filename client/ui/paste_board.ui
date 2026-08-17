@@ -412,7 +412,7 @@
        <item>
         <widget class="QLabel" name="label_9">
          <property name="text">
-          <string>*Delay between two key inputs</string>
+          <string>*Key hold time (ms, e.g. 20-100 on Windows, 2 on Linux)</string>
          </property>
         </widget>
        </item>

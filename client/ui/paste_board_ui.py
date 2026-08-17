@@ -330,7 +330,7 @@ class Ui_Dialog(object):
         self.checkBoxEcho.setText(QCoreApplication.translate("Dialog", u"Use \"echo\" only (2x Slower, but better compatibility)", None))
         self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab_f), QCoreApplication.translate("Dialog", u"File Transfer", None))
         self.label_3.setText(QCoreApplication.translate("Dialog", u"Click Interval / ms", None))
-        self.label_9.setText(QCoreApplication.translate("Dialog", u"*Delay between two key inputs", None))
+        self.label_9.setText(QCoreApplication.translate("Dialog", u"*Key hold time (ms, e.g. 20-100 on Windows, 2 on Linux)", None))
         self.label_6.setText(QCoreApplication.translate("Dialog", u"Packet Size / Bytes", None))
         self.label_7.setText(QCoreApplication.translate("Dialog", u"*Depends on Linux Terminal stdin size limitaion (1K~4K)", None))
         self.label_5.setText(QCoreApplication.translate("Dialog", u"Packet Wait / ms", None))
