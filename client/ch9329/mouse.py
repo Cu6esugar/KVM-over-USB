@@ -107,11 +107,13 @@ def move(
 
 
 def press(ser: Serial, button: str = "left") -> None:
-    send_data_absolute(ser, 0, 0, button)
+    # 用相对零位移状态帧: 按钮在当前位置按下, 不移动光标。
+    # (旧版用绝对坐标(0,0)会把手柄光标甩到左上角, Ubuntu/相对模式下点击失效)
+    send_relative_state(ser, 0, 0, BUTTONS.get(button, 0))
 
 
 def release(ser: Serial) -> None:
-    send_data_absolute(ser, 0, 0, "null")
+    send_relative_state(ser, 0, 0, 0)
 
 
 def click(ser: Serial, button: str = "left") -> None:
