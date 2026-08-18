@@ -702,7 +702,9 @@ class MyMainWindow(QMainWindow, main_ui.Ui_MainWindow):
         # 启动 1 秒后自动检查视频配置:
         #  - 没有可用的视频配置(未配置或设备不在) -> 弹出设备配置对话框
         #  - 配置了设备且 auto_connect 开启 -> 尝试连接, 失败也弹出配置对话框
-        QTimer().singleShot(
+        # 注意: 必须用 QTimer.singleShot 静态调用, 实例调用(QTimer().singleShot)
+        # 在 Nuitka 冻结的 PySide6 里会签名不匹配崩溃
+        QTimer.singleShot(
             1000, lambda: self.auto_setup_video_device()
         )
 
