@@ -1033,7 +1033,12 @@ class MyMainWindow(QMainWindow, main_ui.Ui_MainWindow):
             fmt_str = i.pixelFormat().name.split("_")[1]
             if fmt_str not in fmt_list:
                 fmt_list.append(fmt_str)
-                self.device_setup_dialog.comboBox_3.addItem(fmt_str)
+        # 格式按优先级排序显示: MJPEG > NV12 > YUYV > 其他,
+        # 这样 comboBox_3 默认 index 0 就是最优格式(避开 Qt 的 YUYV 解码交错 bug)
+        fmt_priority = ["Jpeg", "NV12", "YUYV"]
+        fmt_list.sort(key=lambda f: fmt_priority.index(f) if f in fmt_priority else 99)
+        for fmt_str in fmt_list:
+            self.device_setup_dialog.comboBox_3.addItem(fmt_str)
 
     def camera_error_occurred(self, error, string):
         error_s = (
@@ -1088,14 +1093,34 @@ class MyMainWindow(QMainWindow, main_ui.Ui_MainWindow):
                 self.video_alert(self.tr("Target video device not found"))
                 return False
         self.camera = QCamera(self.camera_info)
-        for i in self.camera_info.videoFormats():
-            if (
-                i.resolution().width() == self.video_config["resolution_X"]
-                and i.resolution().height() == self.video_config["resolution_Y"]
-                and i.pixelFormat().name.split("_")[1] == self.video_config["format"]
-            ):
-                self.camera.setCameraFormat(i)
-                break
+        # 格式选择: 用户明确指定(format 非空) -> 精确匹配;
+        # 未指定 -> 按 MJPEG > NV12 > YUYV 优先级自动选择(避开 Qt 的 YUYV 解码交错 bug)
+        wanted_format = self.video_config.get("format")
+        chosen = None
+        if wanted_format:
+            for i in self.camera_info.videoFormats():
+                if (
+                    i.resolution().width() == self.video_config["resolution_X"]
+                    and i.resolution().height() == self.video_config["resolution_Y"]
+                    and i.pixelFormat().name.split("_")[1] == wanted_format
+                ):
+                    chosen = i
+                    break
+        else:
+            priority = ["Jpeg", "NV12", "YUYV"]
+            for fmt_name in priority:
+                for i in self.camera_info.videoFormats():
+                    if (
+                        i.resolution().width() == self.video_config["resolution_X"]
+                        and i.resolution().height() == self.video_config["resolution_Y"]
+                        and i.pixelFormat().name.split("_")[1] == fmt_name
+                    ):
+                        chosen = i
+                        break
+                if chosen is not None:
+                    break
+        if chosen is not None:
+            self.camera.setCameraFormat(chosen)
         else:
             self.video_alert(
                 self.tr("Unsupported combination of resolution and format")
