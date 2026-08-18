@@ -10,9 +10,10 @@ paste_board:
   packet_size: 1000
   packet_wait: 50
 video_config:
-  auto_connect: false
+  auto_connect: true
   device_name: None
   format: None
+  hide_builtin_camera: true
   keep_aspect_ratio: true
   resolution_X: 1920
   resolution_Y: 1080

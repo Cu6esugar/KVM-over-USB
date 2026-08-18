@@ -556,6 +556,9 @@ class MyMainWindow(QMainWindow, main_ui.Ui_MainWindow):
         self.device_setup_dialog.comboBox.currentIndexChanged.connect(
             self.update_device_info
         )
+        self.device_setup_dialog.checkBoxHideBuiltIn.stateChanged.connect(
+            self.reload_device_list
+        )
 
         self.action_fullscreen.triggered.connect(self.fullscreen_func)
         self.action_Resize_window.triggered.connect(self.resize_window_func)
@@ -696,9 +699,12 @@ class MyMainWindow(QMainWindow, main_ui.Ui_MainWindow):
         self.crash_devices = []
 
         self.camera_list_inited = False
-        if self.video_config["auto_connect"]:
-            self.device_setup_dialog.checkBoxAutoConnect.setChecked(True)
-            QTimer().singleShot(1000, lambda: self.set_device(True, center=True))
+        # 启动 1 秒后自动检查视频配置:
+        #  - 没有可用的视频配置(未配置或设备不在) -> 弹出设备配置对话框
+        #  - 配置了设备且 auto_connect 开启 -> 尝试连接, 失败也弹出配置对话框
+        QTimer().singleShot(
+            1000, lambda: self.auto_setup_video_device()
+        )
 
     code_remap = {
         "Rcontrol": 0x011D,
@@ -827,6 +833,26 @@ class MyMainWindow(QMainWindow, main_ui.Ui_MainWindow):
         else:
             self.device_setup_dialog.comboBox_5.setCurrentIndex(0)
 
+    # Hide built-in camera 勾选变化时刷新设备列表
+    def reload_device_list(self):
+        hide_builtin = self.device_setup_dialog.checkBoxHideBuiltIn.isChecked()
+        remember_name = self.video_config.get("device_name")
+        current = self.device_setup_dialog.comboBox.currentText()
+        self.device_setup_dialog.comboBox.clear()
+        devices = []
+        for camera in QMediaDevices.videoInputs():
+            name = camera.description()
+            if hide_builtin and name.startswith("Integrated"):
+                continue
+            self.device_setup_dialog.comboBox.addItem(name)
+            devices.append(name)
+        if remember_name in devices:
+            self.device_setup_dialog.comboBox.setCurrentText(remember_name)
+        elif current in devices:
+            self.device_setup_dialog.comboBox.setCurrentText(current)
+        elif devices:
+            self.device_setup_dialog.comboBox.setCurrentIndex(0)
+
     # 弹出采集卡设备设置窗口，并打开采集卡设备
     def device_config(self):
         if self.serverFrame.isVisible():
@@ -841,10 +867,23 @@ class MyMainWindow(QMainWindow, main_ui.Ui_MainWindow):
         cameras = QMediaDevices.videoInputs()
         remember_name = self.video_config["device_name"]
         # self.video_config["device_name"] = ""
+        # 初始化对话框选项状态 (blockSignals 避免 setChecked 触发 reload_device_list 造成重复填充)
+        self.device_setup_dialog.checkBoxAutoConnect.blockSignals(True)
+        self.device_setup_dialog.checkBoxAutoConnect.setChecked(
+            self.video_config.get("auto_connect", True)
+        )
+        self.device_setup_dialog.checkBoxAutoConnect.blockSignals(False)
+        hide_builtin = self.video_config.get("hide_builtin_camera", True)
+        self.device_setup_dialog.checkBoxHideBuiltIn.blockSignals(True)
+        self.device_setup_dialog.checkBoxHideBuiltIn.setChecked(hide_builtin)
+        self.device_setup_dialog.checkBoxHideBuiltIn.blockSignals(False)
         devices = []
         for camera in cameras:
-            self.device_setup_dialog.comboBox.addItem(camera.description())
-            devices.append(camera.description())
+            name = camera.description()
+            if hide_builtin and name.startswith("Integrated"):
+                continue
+            self.device_setup_dialog.comboBox.addItem(name)
+            devices.append(name)
         self.camera_list_inited = True
         if remember_name in devices:
             self.device_setup_dialog.comboBox.setCurrentText(remember_name)
@@ -921,12 +960,45 @@ class MyMainWindow(QMainWindow, main_ui.Ui_MainWindow):
             self.video_config["auto_connect"] = (
                 self.device_setup_dialog.checkBoxAutoConnect.isChecked()
             )
+            self.video_config["hide_builtin_camera"] = (
+                self.device_setup_dialog.checkBoxHideBuiltIn.isChecked()
+            )
             self.audio_config["audio_support"] = (
                 self.device_setup_dialog.checkBoxAudio.isChecked()
             )
             self.save_config()
         except Exception as e:
             logger.error(e)
+
+    # 启动时自动检查视频配置:
+    #  - 无可用视频配置(未配置或设备不在列表) -> 弹出设备配置对话框
+    #  - 配置了设备且 auto_connect 开启 -> 尝试连接, 失败也弹出配置对话框
+    def auto_setup_video_device(self):
+        if self.camera_opened:
+            return
+        # 先检查配置的设备是否存在(不重置下拉框, 用 name 查找)
+        cameras = QMediaDevices.videoInputs()
+        dev_name = self.video_config.get("device_name")
+        found = None
+        if dev_name:
+            for camera in cameras:
+                if camera.description() == dev_name:
+                    found = camera
+                    break
+        self.camera_info = found
+
+        need_dialog = False
+        if found is None:
+            need_dialog = True
+        elif self.video_config.get("auto_connect"):
+            self.device_setup_dialog.checkBoxAutoConnect.setChecked(True)
+            # 尝试连接, 失败(如分辨率/格式不匹配)则弹配置框
+            self.set_device(True, center=True)
+            if not self.camera_opened:
+                need_dialog = True
+
+        if need_dialog:
+            self.device_config()
 
     # 获取采集卡分辨率
     def update_device_info(self):
@@ -943,13 +1015,12 @@ class MyMainWindow(QMainWindow, main_ui.Ui_MainWindow):
                 self.camera_info = None
                 return
         else:
-            try:
-                self.camera_info = cameras[
-                    self.device_setup_dialog.comboBox.currentIndex()
-                ]
-            except IndexError:
-                self.camera_info = None
-                return
+            sel_name = self.device_setup_dialog.comboBox.currentText()
+            self.camera_info = None
+            for camera in cameras:
+                if camera.description() == sel_name:
+                    self.camera_info = camera
+                    break
         res_list = []
         fmt_list = []
         for i in self.camera_info.videoFormats():

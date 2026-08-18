@@ -3,7 +3,7 @@
 ################################################################################
 ## Form generated from reading UI file 'device_setup_dialog.ui'
 ##
-## Created by: Qt User Interface Compiler version 6.5.2
+## Created by: Qt User Interface Compiler version 6.5.3
 ##
 ## WARNING! All changes made in this file will be lost when recompiling UI file!
 ################################################################################
@@ -93,6 +93,11 @@ class Ui_Dialog(object):
 
         self.formLayout.setWidget(8, QFormLayout.FieldRole, self.checkBoxAutoConnect)
 
+        self.checkBoxHideBuiltIn = QCheckBox(Dialog)
+        self.checkBoxHideBuiltIn.setObjectName(u"checkBoxHideBuiltIn")
+
+        self.formLayout.setWidget(11, QFormLayout.FieldRole, self.checkBoxHideBuiltIn)
+
         self.comboBox_5 = QComboBox(Dialog)
         self.comboBox_5.setObjectName(u"comboBox_5")
         self.comboBox_5.setMouseTracking(False)
@@ -121,6 +126,7 @@ class Ui_Dialog(object):
         self.label_4.setText(QCoreApplication.translate("Dialog", u"Audio IN", None))
         self.label_5.setText(QCoreApplication.translate("Dialog", u"Audio OUT", None))
         self.checkBoxAutoConnect.setText(QCoreApplication.translate("Dialog", u"Auto Connect on startup", None))
+        self.checkBoxHideBuiltIn.setText(QCoreApplication.translate("Dialog", u"Hide built-in camera", None))
         self.label_7.setText(QCoreApplication.translate("Dialog", u"* Audio routing only work in video recording", None))
     # retranslateUi
 
