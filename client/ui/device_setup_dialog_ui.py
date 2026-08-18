@@ -55,7 +55,7 @@ class Ui_Dialog(object):
         self.buttonBox.setOrientation(Qt.Horizontal)
         self.buttonBox.setStandardButtons(QDialogButtonBox.Cancel|QDialogButtonBox.Ok)
 
-        self.formLayout.setWidget(10, QFormLayout.FieldRole, self.buttonBox)
+        self.formLayout.setWidget(12, QFormLayout.FieldRole, self.buttonBox)
 
         self.label_3 = QLabel(Dialog)
         self.label_3.setObjectName(u"label_3")
