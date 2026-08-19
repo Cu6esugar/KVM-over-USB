@@ -217,13 +217,22 @@ def hid_report_mouse(buffer_mouse):
         print("line 205, buffer_mouse error:", buffer_mouse)
     return 0
 
+_abs_buttons_sent = 0
+
+
 def hid_report_mouse_move_to(buffer_mouse):
+    global _abs_buttons_sent
     x= ((buffer_mouse[5] & 0xFF) << 8 )+ buffer_mouse[4]
     xx= int(x / 0x7FFF * SCREEN_SIZE[0])
     y= ((buffer_mouse[7] & 0xFF) << 8 ) + buffer_mouse[6]
     yy= int(y / 0x7FFF * SCREEN_SIZE[1])
     # 状态帧: 按键位图在 buffer[3](旋转后), 1左2右4中, 与坐标同帧发送支持拖动
     mouse.send_absolute_state(K_M,xx,yy,buffer_mouse[3],SCREEN_SIZE[0],SCREEN_SIZE[1])
+    # Wayland 合成器忽略绝对报文里的按键位(光标跟随但点击无效),
+    # 按下/按住/松开时补发零位移相对状态帧携带按键(相对报文按键在 Wayland 下正常)
+    if buffer_mouse[3] != 0 or _abs_buttons_sent != 0:
+        mouse.send_relative_state(K_M, 0, 0, buffer_mouse[3])
+        _abs_buttons_sent = buffer_mouse[3]
     print ("line 214, mouse move to",xx,yy)
     return 0
 
