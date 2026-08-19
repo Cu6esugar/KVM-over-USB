@@ -230,25 +230,31 @@ def hid_report_mouse_move_to(buffer_mouse):
     mouse.send_absolute_state(K_M,xx,yy,buffer_mouse[3],SCREEN_SIZE[0],SCREEN_SIZE[1])
     # Wayland 合成器忽略绝对报文里的按键位(光标跟随但点击无效),
     # 按下/按住/松开时补发零位移相对状态帧携带按键(相对报文按键在 Wayland 下正常)
-    if buffer_mouse[3] != 0 or _abs_buttons_sent != 0:
-        mouse.send_relative_state(K_M, 0, 0, buffer_mouse[3])
+    # 按键位变化时补发 1px 非零位移相对状态帧(相对报文按键在 Wayland 下正常)
+    if buffer_mouse[3] != _abs_buttons_sent:
+        if buffer_mouse[3] != 0:
+            mouse.send_relative_state(K_M, 1, 1, buffer_mouse[3])
+        else:
+            mouse.send_relative_state(K_M, 1, 1, 0)
         _abs_buttons_sent = buffer_mouse[3]
     print ("line 214, mouse move to",xx,yy)
     return 0
 
 def hid_report_mouse_click(buffer_mouse):
     # 原地点击: 按下->停留->释放 (保持原有人性化延迟)
+    # Wayland 合成器忽略零位移相对按钮, 用 1px 非零位移相对帧携带按键
     if buffer_mouse[3]== 1:
-        mouse.press(K_M,'left')
+        btn= 1
     elif buffer_mouse[3]== 2:
-        mouse.press(K_M,'right')
+        btn= 2
     elif buffer_mouse[3]== 4:
-        mouse.press(K_M,'middle')
+        btn= 4
     else:
         print ("line 225, hid_report_mouse_click, mouse XButton? ",buffer_mouse)
         return 0
+    mouse.send_relative_state(K_M, 1, 1, btn)
     time.sleep(random.uniform(0.1, 0.3))
-    mouse.release(K_M)
+    mouse.send_relative_state(K_M, 1, 1, 0)
     return 0
 
 def hid_report_mouse_keyDown(buffer_mouse):
