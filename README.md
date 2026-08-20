@@ -20,11 +20,11 @@
 
 
 【硬件图】
-![image](https://github.com/binnehot/KVM-over-USB/blob/main/image/0_HW_KVM_photo.JPG)
+![image](./image/0_HW_KVM_photo.JPG)
 
 
 【硬件框图】
-![image](https://github.com/binnehot/KVM-over-USB/blob/main/image/1_HW_drawing.png)
+![image](./image/1_HW_drawing.png)
 
 
 ## 软件
@@ -61,7 +61,7 @@ HDMI和USB，即插即用，不用安装驱动，不挑操作系统，BIOS设置
 
 【应用例子，修改BIOS设定】
 
-![image](https://github.com/binnehot/KVM-over-USB/blob/main/image/4_BIOS_Gif.gif)
+![image](./image/4_BIOS_Gif.gif)
 
 ## 运行（开发）
 
